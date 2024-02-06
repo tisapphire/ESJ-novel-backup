@@ -8,6 +8,7 @@ import json
 import os
 import sys
 
+from bs4 import BeautifulSoup
 
 symbol_list = {
     "\\": "-",
@@ -24,20 +25,41 @@ symbol_list = {
     "\n": " ",
 }
 
+cookies = {"ews_key": "xxxx", "ews_token": "xxxx"}
+
+def get_subpage_links(directory_url):
+    subpage_links = []
+
+    # 发送GET请求获取目录页面内容
+    response = requests.get(directory_url, cookies=cookies)
+    if response.status_code == 200:
+        # 使用BeautifulSoup解析目录页面
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 找到所有tag属性为'a'的元素
+        links = soup.find_all('a')
+
+        # 提取每个链接的URL并添加到子页面链接列表
+        for link in links:
+            subpage_url = link.get('href')
+            if subpage_url and re.match(r'https://www\.esjzone\.cc/forum/.+\.html', subpage_url):
+                subpage_links.append(subpage_url)
+
+    return subpage_links
 
 def write_page(url, dst_file, single_file=True):
-    r = requests.get(url)
+    r = requests.get(url, cookies=cookies)
     html_element = lxml.html.document_fromstring(r.text)
     if html_element.xpath('//h2'):
         title = html_element.xpath('//h2')[0]
         author = html_element.xpath('//div[@class="single-post-meta m-t-20"]/div')[0]
         content = html_element.xpath('//div[@class="forum-content mt-3"]')[0]
         if single_file:
-            with open(dst_file, 'a') as f:
+            with open(dst_file, 'a', encoding='utf-8') as f:
                 f.write('[' + title.text_content() + '] ' + author.text_content().strip() + '\n')
                 f.write(content.text_content()+'\n\n')
         else:
-            with open(dst_file, 'w') as f:
+            with open(dst_file, 'w', encoding='utf-8') as f:
                 f.write('[' + title.text_content() + '] ' + author.text_content().strip() + '\n')
                 f.write(content.text_content()+'\n\n')
 
@@ -65,7 +87,7 @@ if __name__ == "__main__":
     page_flag = False
 
     if len(sys.argv) == 1:
-        print("Usage: ", __file__, " https://www.esjzone.cc/detail/1599746513.html")
+        print("Usage: ", __file__, " https://www.esjzone.cc/detail/1599746513")
         print("       ", __file__, " https://www.esjzone.cc/forum/1584679807/1599746513/")
         print("       ", __file__, " https://www.esjzone.cc/forum/1599746513/121688.html")
         sys.exit()
@@ -73,6 +95,8 @@ if __name__ == "__main__":
   
     url = sys.argv[1]
     if re.search(r'https://www\.esjzone\.cc/detail/\d+\.html', url):
+        novel_flag = True
+    elif re.search(r'https://www\.esjzone\.cc/detail/\d', url):
         novel_flag = True
     elif re.search(r'https://www\.esjzone\.cc/forum/\d+/\d+/', url):
         forum_flag = True
@@ -85,15 +109,17 @@ if __name__ == "__main__":
 
     if novel_flag :
 
-        r = requests.get(url)
+        r = requests.get(url, cookies=cookies)
         html_element = lxml.html.document_fromstring(r.text)
+
+        s=get_subpage_links(url)
 
         novel_name = html_element.xpath('//h2[@class="p-t-10 text-normal"]')[0].text_content()
         novel_name = escape_symbol(novel_name)
         dst_filename = os.path.normpath( current_path + '/' + novel_name + '.txt')
-        with open(dst_filename, 'w') as f:
-            f.write(u"書名: " + novel_name + "\n")
-        with open(dst_filename, 'a') as f:
+        with open(dst_filename, 'w', encoding='utf-8') as f:
+            f.write(u"书名: " + novel_name + "\n")
+        with open(dst_filename, 'a', encoding='utf-8') as f:
             f.write(u"URL: " + url)
 
         novel_details_element = html_element.xpath('//ul[@class="list-unstyled mb-2 book-detail"]')[0]
@@ -102,44 +128,31 @@ if __name__ == "__main__":
             for bad_div in bad_divs:
                 bad_div.getparent().remove(bad_div)
         novel_details = novel_details_element.text_content()
-        with open(dst_filename, 'a') as f:
+        with open(dst_filename, 'a', encoding='utf-8') as f:
             f.write(novel_details)
 
         novel_outlink_element = html_element.xpath('//div[@class="row out-link"]')[0]
         if len(novel_outlink_element) != 0:
             outlink_list = novel_outlink_element.getchildren()
             for element in outlink_list:
-                with open(dst_filename, 'a') as f:
+                with open(dst_filename, 'a', encoding='utf-8') as f:
                     f.write(element.getchildren()[0].text_content() + u":\n" + element.getchildren()[0].attrib['href'] + "\n")
 
         if re.search('id="details"', r.text):
             novel_description = html_element.get_element_by_id("details").text_content()
-            with open(dst_filename, 'a') as f:
+            with open(dst_filename, 'a', encoding='utf-8') as f:
                 f.write(novel_description)
         else:
-            with open(dst_filename, 'a') as f:
+            with open(dst_filename, 'a', encoding='utf-8') as f:
                 f.write('\n\n')
 
-        if re.search('id="chapterList"', r.text):
-            chapter_list = html_element.get_element_by_id("chapterList").getchildren()
-            
-            for element in chapter_list:
-        
-                with open(dst_filename, 'a') as f:
-                    f.write(element.text_content()+'\n')
-                
-                if element.tag == 'a':
-
-                    if re.search(r'esjzone\.cc/forum/\d+/\d+\.html', element.attrib['href']):
-                        write_page(element.attrib['href'], dst_filename, single_file=True)
-                    else:
-                        with open(dst_filename, 'a') as f:
-                            f.write(element.attrib['href'] + u' {非站內連結，略過}\n\n')
+        for url in s:
+            write_page(url, dst_filename, single_file=True)
 
 
     if forum_flag:
 
-        r = requests.get(url)
+        r = requests.get(url, cookies=cookies)
         html_element = lxml.html.document_fromstring(r.text)
         novel_name = html_element.xpath('//h2[@class="p-t-10 text-normal"]')[0].text_content()
         novel_name = escape_symbol(novel_name)
