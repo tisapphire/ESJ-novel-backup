@@ -34,3 +34,6 @@ Python 3.x 對應 esjbackup3.py
 `pyhon esjbackup.py https://www.esjzone.cc/forum/1599746513/121688.html`
 
 僅保存該單篇的  txt 文字檔。
+
+## 注
+这个程序现在使用只会下载标题，所有修改使其可以正常爬取文章（只修改了用detail界面下载的部分，forum部分未修改，单篇界面使用正常未修改）
